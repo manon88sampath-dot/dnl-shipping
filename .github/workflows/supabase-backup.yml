@@ -13,28 +13,13 @@ jobs:
       contents: read
 
     steps:
-      - name: Install PostgreSQL 17 client
+      - name: Create backup directory
         shell: bash
         run: |
           set -euo pipefail
+          mkdir -p backups
 
-          sudo apt-get update
-          sudo apt-get install -y curl ca-certificates gnupg lsb-release
-
-          sudo install -d /usr/share/postgresql-common/pgdg
-
-          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-            | sudo gpg --dearmor -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg
-
-          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" \
-            | sudo tee /etc/apt/sources.list.d/pgdg.list >/dev/null
-
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client-17
-
-          pg_dump --version
-
-      - name: Create full backup
+      - name: Create full PostgreSQL 17 backup
         shell: bash
         env:
           SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
@@ -46,18 +31,20 @@ jobs:
             exit 1
           fi
 
-          mkdir -p backups
-
           stamp=$(date -u +%Y%m%d-%H%M%S)
 
-          pg_dump "$SUPABASE_DB_URL" \
-            --format=custom \
-            --no-owner \
-            --no-privileges \
-            --schema=public \
-            --schema=auth \
-            --schema=storage \
-            --file="backups/dnl-shipping-full-${stamp}.dump"
+          docker run --rm \
+            -e DATABASE_URL="$SUPABASE_DB_URL" \
+            -v "$PWD/backups:/backups" \
+            postgres:17 \
+            pg_dump "$DATABASE_URL" \
+              --format=custom \
+              --no-owner \
+              --no-privileges \
+              --schema=public \
+              --schema=auth \
+              --schema=storage \
+              --file="/backups/dnl-shipping-full-${stamp}.dump"
 
           ls -lh backups/
 
